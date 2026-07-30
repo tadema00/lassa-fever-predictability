@@ -89,8 +89,18 @@ cluster_of <- function(state) {
     TRUE ~ "Other (not in study)"
   )
 }
-
-# File paths - adjust to local project layout. Place the three uploaded data
+# ---------------------------------------------------------------------------
+# Project directories
+#
+# Raw input datasets should be placed in:
+#   data/raw/
+#
+# Intermediate processed datasets may be written to:
+#   data/processed/
+#
+# All generated figures, tables, and .rds files are written to:
+#   outputs/
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Project directories
 # ---------------------------------------------------------------------------
@@ -98,11 +108,10 @@ cluster_of <- function(state) {
 RAW_DATA_DIR  <- file.path("data", "raw")
 PROC_DATA_DIR <- file.path("data", "processed")
 
-OUT_DIR <- "outputs"
-FIG_DIR <- file.path(OUT_DIR, "figures")
-TAB_DIR <- file.path(OUT_DIR, "tables")
-RDS_DIR <- file.path(OUT_DIR, "rds")
+dir.create(RAW_DATA_DIR,  recursive = TRUE, showWarnings = FALSE)
+dir.create(PROC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
 
+dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(TAB_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
@@ -114,7 +123,7 @@ dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
 SHAPEFILE   <- file.path(RAW_DATA_DIR, "gadm41_NGA_1.shp")
 ANNUAL_XLSX <- file.path(RAW_DATA_DIR, "annual_data.xlsx")
 WEEKLY_XLSX <- file.path(RAW_DATA_DIR, "Cases_rainfal_data.xlsx")
-CLIMATE_CSV <- file.path(RAW_DATA_DIR, "climate_features.csv")
+
 
 # Choropleth binning (matches the Python script's BINS/BIN_LABELS/COLORS)
 CASE_BREAKS <- c(-0.1, 0, 10, 50, 100, 300, Inf)
