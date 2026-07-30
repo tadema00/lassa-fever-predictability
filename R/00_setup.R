@@ -91,19 +91,30 @@ cluster_of <- function(state) {
 }
 
 # File paths - adjust to local project layout. Place the three uploaded data
-# files (annual_data.xlsx, Cases_rainfal_data.xlsx, climate_features.csv)
-# inside a `data/` subfolder next to these scripts, using exactly these names.
-DATA_DIR <- "data"
-OUT_DIR  <- "outputs"
-FIG_DIR  <- file.path(OUT_DIR, "figures")
-TAB_DIR  <- file.path(OUT_DIR, "tables")
+# ---------------------------------------------------------------------------
+# Project directories
+# ---------------------------------------------------------------------------
+
+RAW_DATA_DIR  <- file.path("data", "raw")
+PROC_DATA_DIR <- file.path("data", "processed")
+
+OUT_DIR <- "outputs"
+FIG_DIR <- file.path(OUT_DIR, "figures")
+TAB_DIR <- file.path(OUT_DIR, "tables")
+RDS_DIR <- file.path(OUT_DIR, "rds")
+
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(TAB_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
 
-SHAPEFILE   <- file.path(DATA_DIR, "gadm41_NGA_1.shp")
-ANNUAL_XLSX <- file.path(DATA_DIR, "annual_data.xlsx")
-WEEKLY_XLSX <- file.path(DATA_DIR, "Cases_rainfal_data.xlsx")   # state, epi_week, year, cases, rainfall_mm
-CLIMATE_CSV <- file.path(DATA_DIR, "climate_features.csv")     # NDVI / temp / soil-moisture features (not currently consumed by any stage in this pipeline; reserved for future extensions)
+# ---------------------------------------------------------------------------
+# Input data
+# ---------------------------------------------------------------------------
+
+SHAPEFILE   <- file.path(RAW_DATA_DIR, "gadm41_NGA_1.shp")
+ANNUAL_XLSX <- file.path(RAW_DATA_DIR, "annual_data.xlsx")
+WEEKLY_XLSX <- file.path(RAW_DATA_DIR, "Cases_rainfal_data.xlsx")
+CLIMATE_CSV <- file.path(RAW_DATA_DIR, "climate_features.csv")
 
 # Choropleth binning (matches the Python script's BINS/BIN_LABELS/COLORS)
 CASE_BREAKS <- c(-0.1, 0, 10, 50, 100, 300, Inf)
