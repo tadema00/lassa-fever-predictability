@@ -68,7 +68,7 @@ dependencies have already been produced.
   any archived release (e.g. to Zenodo) so package versions are recorded.
 - **Namespace conflicts.** `signal::filter()` and `MASS::select()` both mask
   `dplyr::filter()`/`dplyr::select()` when loaded after `tidyverse`.
-  `00_setup.R` pins `filter`, `select`, and `lag` to their `dplyr` versions
+  `000_setup.R` pins `filter`, `select`, and `lag` to their `dplyr` versions
   explicitly so stage scripts behave the same regardless of package load
   order.
 
