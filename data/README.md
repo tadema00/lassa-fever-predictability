@@ -24,7 +24,7 @@ data/
 └── processed/
 ```
 
-The pipeline expects the data directory to be defined in `00_setup.R` as:
+The pipeline expects the data directory to be defined in `000_setup.R` as:
 
 ```r
 DATA_DIR <- "data"
