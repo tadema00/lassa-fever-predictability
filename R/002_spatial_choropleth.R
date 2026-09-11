@@ -1,12 +1,7 @@
 # ============================================================================
 # 02_spatial_choropleth_moran.R
-#
-# National choropleth maps (Figures 1-3) + Global Moran's I spatial
-# autocorrelation test (Section 2.9 / Section 3.1).
-#
-# Focal states are HIGHLIGHTED (outlined), never masked to zero, and the
-# six-state cohort uses Plateau (not Benue).
-#
+# National choropleth maps (Figures 1-3) 
+
 # NOTE: this script needs a GADM Nigeria state-boundary shapefile at
 # data/gadm41_NGA_1.shp (the .shp plus its .dbf/.shx/.prj siblings). That file
 # was not among the three uploads (annual_data.xlsx, Cases_rainfal_data.xlsx,
@@ -14,7 +9,7 @@
 # fast with a clear message instead of a cryptic sf::st_read() error.
 # ============================================================================
 
-source("00_setup.R")
+source("000_setup.R")
 
 if (!file.exists(SHAPEFILE)) {
   stop(
@@ -141,51 +136,10 @@ plot_cluster_highlight <- function(gdf) {
 }
 
 # ---------------------------------------------------------------------------
-# Global Moran's I under Queen contiguity, per year, formally testing the
-# Section 3.1 claim that LF's national footprint is not a single spatially
-# contiguous cluster.
-# ---------------------------------------------------------------------------
-compute_morans_i_by_year <- function(gdf, annual_long) {
-  nb <- spdep::poly2nb(gdf, queen = TRUE)
-  lw <- spdep::nb2listw(nb, style = "W", zero.policy = TRUE)
-  
-  years <- sort(unique(annual_long$Year))
-  results <- map_dfr(years, function(yr) {
-    yr_data <- annual_long |>
-      dplyr::filter(Year == yr)
-    merged <- gdf %>%
-      left_join(yr_data, by = c("NAME_1" = "State")) %>%
-      mutate(Cases = replace_na(Cases, 0))
-    test <- spdep::moran.test(merged$Cases, lw, zero.policy = TRUE)
-    tibble(
-      Year = yr,
-      MoranI = unname(test$estimate["Moran I statistic"]),
-      p_value = test$p.value
-    )
-  })
-  results
-}
-
-morans_results <- compute_morans_i_by_year(gdf, annual_long)
-print(morans_results)
-write_csv(morans_results, file.path(TAB_DIR, "morans_i_by_year.csv"))
-
-morans_plot <- ggplot(morans_results, aes(x = Year, y = MoranI)) +
-  geom_col(aes(fill = p_value < 0.05)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c(`TRUE` = "#C0392B", `FALSE` = "#95A5A6"),
-                    labels = c(`TRUE` = "p < 0.05", `FALSE` = "n.s."), name = NULL) +
-  labs(title = "Global Moran's I, national Lassa fever case counts (Queen contiguity)",
-       y = "Moran's I", x = NULL) +
-  theme_minimal(base_size = 12)
-ggsave(file.path(FIG_DIR, "morans_i_by_year.png"), morans_plot, width = 7, height = 4.5, dpi = 200)
-
-# ---------------------------------------------------------------------------
 # Run the figure generation
 # ---------------------------------------------------------------------------
 plot_cluster_highlight(gdf)
 plot_cumulative(gdf, annual_cumulative)
 plot_annual_panels(gdf, annual_long)
 
-cat("Spatial figures + Moran's I test complete.\n")
-
+cat("Spatial figures \n")
