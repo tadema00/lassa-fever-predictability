@@ -16,12 +16,11 @@ rolling-origin forecast validation.
   `circular`, `boot`, `tseries`, `viridis`, `patchwork`, `scico`, `cowplot`,
   `e1071`, `goftest`
 
-## Setup
+## Run the code
 
-1. Clone this repository.
-2. Place the required data files in `data/` (see `data/README.md` for the
+1. Place the required data files in `data/` (see `data/README.md` for the
    exact filenames expected).
-3. From the project root:
+2. From the project root:
 
 ```r
 source("run_all.R")
