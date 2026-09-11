@@ -1,5 +1,5 @@
 # ============================================================================
-# 00_setup.R
+# 000_setup.R
 # Lassa fever Early Warning System pipeline
 # Packages, global constants, file paths, and shared helper functions used
 # by every other script in the pipeline. Source this file at the top of
