@@ -1,8 +1,6 @@
 # Lassa Fever SPI Early Warning Pipeline
 
-R analysis pipeline supporting *"Predictability and Timing of Lassa Fever
-Outbreaks in Nigeria: A Wavelet-Informed Early Warning Framework Using the
-Standardized Precipitation Index."* The pipeline estimates climate-disease
+R analysis pipeline supporting *"Predicting Lassa Fever Outbreak Timing in Nigeria: A Wavelet-Informed Early Warning Framework Using the Standardized Precipitation Index."* The pipeline estimates climate-disease
 lags using wavelet phase, cross-correlation, and AIC-guided triangulation;
 tests wavelet coherence between the Standardized Precipitation Index (SPI-4)
 and Lassa fever incidence; fits SARIMAX and Zero-Inflated Negative Binomial
