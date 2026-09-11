@@ -1,8 +1,6 @@
 # ============================================================================
 # 01a_data_prep_SPI.R
 # Multi-Scale Standardized Precipitation Index (SPI-1, SPI-4, SPI-8) pipeline
-#
-# Methodological note (matches manuscript Section 2.x):
 # SPI was computed following McKee et al. (1993), assuming positive rainfall
 # totals are Gamma distributed, with maximum likelihood parameter estimation
 # as recommended by Guttman (1999) and Stagge et al. (2015). The 2018-2023
@@ -10,18 +8,22 @@
 # standardization. To increase the reference sample size to approximately
 # 42 observations while preserving seasonal homogeneity, a +/-3
 # epidemiological-week moving window was adopted.
-#
 # Saves `baseline_params` into prepared_data.rds so that downstream scripts
 # (01b, 03a) can recompute SPI from the same fitted baseline without
 # re-running this script or refitting the Gamma distributions.
 # ============================================================================
 
-source("00_setup.R")
+source("000_setup.R")
 
 # ---------------------------------------------------------------------------
 # 1. Reshape wide weekly data into long State/Epi_Week/Year panel
 # ---------------------------------------------------------------------------
 weekly_data <- readxl::read_excel(WEEKLY_XLSX)
+glimpse(weekly_data)
+
+# Read annual data only once
+annual_data <- readxl::read_excel(ANNUAL_XLSX)
+glimpse(annual_data)
 
 cases_long <- weekly_data %>%
   dplyr::select(years, weeks, ends_with("_cases")) %>%
@@ -43,6 +45,13 @@ weekly_raw <- cases_long %>%
   mutate(Epi_Week = ((week_idx - 1) %% 52) + 1) %>%
   filter(State %in% FOCAL_STATES) %>%
   arrange(State, Year, week_idx)
+
+# Check that all focal states are present
+missing_states <- setdiff(FOCAL_STATES, unique(weekly_raw$State))
+if (length(missing_states) > 0) {
+  stop("The following focal states are missing from the weekly data: ",
+       paste(missing_states, collapse = ", "))
+}
 
 # ---------------------------------------------------------------------------
 # 2. Fill short case-reporting gaps (<=3 weeks, linear interpolation);
@@ -95,8 +104,7 @@ weekly <- weekly %>%
     Rain_acc_8 = rollapply(Rainfall_mm, width = 8, FUN = sum, align = "right", fill = NA)
   ) %>%
   ungroup()
-print(weekly)
-tail(weekly)
+
 # ---------------------------------------------------------------------------
 # 4. Precomputed Baseline Parameter Table (+/-3 Weeks / ~42 Observations Window)
 #    Includes Gamma MLE/MoM fitting and Anderson-Darling goodness-of-fit testing.
@@ -391,11 +399,10 @@ integrity_check <- annual_long %>%
   )
 
 write_csv(integrity_check, file.path(TAB_DIR, "national_total_integrity_check.csv"))
-
-# NOTE (fix #2 above): `baseline_params` is now part of the saved bundle so
-# 01b_rainfall_interpolation_sensitivity.R and 03a_spi_wavelet_lag_analysis.R
-# can recompute SPI on the *uninterpolated* rainfall series without needing
-# to re-run this entire script or re-fit the Gamma baselines from scratch.
+integrity_check
+# ---------------------------------------------------------------------------
+# Save prepared data (includes weekly_original for sensitivity analysis)
+# ---------------------------------------------------------------------------
 saveRDS(
   list(
     weekly           = weekly,
@@ -406,5 +413,150 @@ saveRDS(
   ),
   file.path(OUT_DIR, "prepared_data.rds")
 )
-cat("\nData preparation complete: Q1-ready multi-scale SPI pipeline executed successfully.\n")
+cat("\nData preparation completed\n")
+
+
+# ============================================================================
+# 01b_rainfall_interpolation_sensitivity.R
+# Robustness check: do the SPI-based lag and coherence estimates depend on
+# the rainfall-interpolation procedure used in 01a_data_prep_SPI.R?
+#
+# Compares `weekly_original` (rainfall as reported, missing weeks left as NA
+# and dropped case-wise) against `weekly` (linearly interpolated + LOCF/NOCB-
+# completed) on SPI distribution properties (mean, SD) at each scale
+# (SPI-1, SPI-4, SPI-8).
+#
+# Reads `baseline_params` and `compute_spi_from_baseline()` from
+# prepared_data.rds / redefines them locally, so this script has no hidden
+# dependency on 01a's R session and can be run independently.
+# ============================================================================
+
+# (This section is already included above; for clarity, we run it here as a separate block.)
+# If you split into two files, move everything below this line into 01b.R
+
+source("00_setup.R")   # if run separately, but we are in the same script
+
+prepped         <- readRDS(file.path(OUT_DIR, "prepared_data.rds"))
+weekly          <- prepped$weekly           # interpolated rainfall & SPI
+weekly_original <- prepped$weekly_original  # rainfall as reported (NAs retained)
+baseline_params <- prepped$baseline_params  # Gamma/empirical baseline fits from 01a
+
+# Local copy of the SPI transform (identical to the one in 01a) so this
+# script has no hidden dependency on 01a's environment.
+compute_spi_from_baseline <- function(df, baseline_df, scale_val) {
+  acc_col <- paste0("Rain_acc_", scale_val)
+  spi_col <- paste0("SPI_", scale_val)
+  
+  base_sub <- baseline_df %>% filter(Scale == scale_val)
+  
+  df_joined <- df %>%
+    left_join(base_sub %>% select(State, Epi_Week, shape, rate, q, empirical_fn), by = c("State", "Epi_Week"))
+  
+  spi_vals <- numeric(nrow(df_joined))
+  
+  for (i in seq_len(nrow(df_joined))) {
+    val <- df_joined[[acc_col]][i]
+    q_val <- df_joined$q[i]
+    shape <- df_joined$shape[i]
+    rate <- df_joined$rate[i]
+    
+    emp_cell <- df_joined$empirical_fn[i]
+    emp_fn <- if (is.list(emp_cell)) emp_cell[[1]] else NULL
+    
+    if (is.na(val) || is.na(q_val)) {
+      spi_vals[i] <- NA_real_
+      next
+    }
+    
+    if (val == 0) {
+      H_val <- q_val
+    } else {
+      if (is.na(shape) || is.na(rate) || shape <= 0 || rate <= 0 || !is.function(emp_fn)) {
+        prob_nz <- if (is.function(emp_fn)) emp_fn(val) else 0.5
+        H_val <- q_val + (1 - q_val) * prob_nz
+      } else {
+        prob_nz <- pgamma(val, shape = shape, rate = rate)
+        H_val <- q_val + (1 - q_val) * prob_nz
+      }
+    }
+    
+    H_val <- pmin(pmax(H_val, 1e-10), 1.0 - 1e-10)
+    s_val <- qnorm(H_val)
+    spi_vals[i] <- if (is.finite(s_val)) s_val else 0.0
+  }
+  
+  df_joined[[spi_col]] <- spi_vals
+  df_joined %>% select(-shape, -rate, -q, -empirical_fn)
+}
+
+# ---------------------------------------------------------------------------
+# Recompute SPI on the original (uninterpolated) series for comparison
+# ---------------------------------------------------------------------------
+weekly_original <- weekly_original %>%
+  group_by(State) %>%
+  arrange(Year, week_idx) %>%
+  mutate(
+    Rain_acc_1 = Rainfall_mm,
+    Rain_acc_4 = rollapply(Rainfall_mm, width = 4, FUN = sum, align = "right", fill = NA, na.rm = FALSE),
+    Rain_acc_8 = rollapply(Rainfall_mm, width = 8, FUN = sum, align = "right", fill = NA, na.rm = FALSE)
+  ) %>%
+  ungroup()
+
+# Compute SPI for original series using the same baseline parameters
+weekly_original <- compute_spi_from_baseline(weekly_original, baseline_params, 1)
+weekly_original <- compute_spi_from_baseline(weekly_original, baseline_params, 4)
+weekly_original <- compute_spi_from_baseline(weekly_original, baseline_params, 8)
+
+# ---------------------------------------------------------------------------
+# Compare metrics between interpolated and original series
+# ---------------------------------------------------------------------------
+compare_one_state_spi <- function(st) {
+  d_orig <- weekly_original %>% filter(State == st) %>% arrange(Year, week_idx)
+  d_int  <- weekly         %>% filter(State == st) %>% arrange(Year, week_idx)
+  
+  tibble(
+    State = st,
+    SPI1_mean_orig = mean(d_orig$SPI_1, na.rm = TRUE),
+    SPI1_mean_int  = mean(d_int$SPI_1, na.rm = TRUE),
+    SPI1_sd_orig   = sd(d_orig$SPI_1, na.rm = TRUE),
+    SPI1_sd_int    = sd(d_int$SPI_1, na.rm = TRUE),
+    
+    SPI4_mean_orig = mean(d_orig$SPI_4, na.rm = TRUE),
+    SPI4_mean_int  = mean(d_int$SPI_4, na.rm = TRUE),
+    SPI4_sd_orig   = sd(d_orig$SPI_4, na.rm = TRUE),
+    SPI4_sd_int    = sd(d_int$SPI_4, na.rm = TRUE),
+    
+    SPI8_mean_orig = mean(d_orig$SPI_8, na.rm = TRUE),
+    SPI8_mean_int  = mean(d_int$SPI_8, na.rm = TRUE),
+    SPI8_sd_orig   = sd(d_orig$SPI_8, na.rm = TRUE),
+    SPI8_sd_int    = sd(d_int$SPI_8, na.rm = TRUE)
+  )
+}
+
+sensitivity_table <- map_dfr(FOCAL_STATES, compare_one_state_spi) %>%
+  mutate(
+    SPI1_mean_diff = abs(SPI1_mean_int - SPI1_mean_orig),
+    SPI1_sd_diff   = abs(SPI1_sd_int - SPI1_sd_orig),
+    SPI4_mean_diff = abs(SPI4_mean_int - SPI4_mean_orig),
+    SPI4_sd_diff   = abs(SPI4_sd_int - SPI4_sd_orig),
+    SPI8_mean_diff = abs(SPI8_mean_int - SPI8_mean_orig),
+    SPI8_sd_diff   = abs(SPI8_sd_int - SPI8_sd_orig)
+  )
+
+print(sensitivity_table)
+write_csv(sensitivity_table, file.path(TAB_DIR, "spi_rainfall_interpolation_sensitivity.csv"))
+
+max_mean_diff <- max(c(sensitivity_table$SPI1_mean_diff, sensitivity_table$SPI4_mean_diff, sensitivity_table$SPI8_mean_diff), na.rm = TRUE)
+max_sd_diff   <- max(c(sensitivity_table$SPI1_sd_diff, sensitivity_table$SPI4_sd_diff, sensitivity_table$SPI8_sd_diff), na.rm = TRUE)
+
+cat(sprintf(
+  "\nLargest mean SPI discrepancy across states/scales: %.3f. Largest SD discrepancy: %.3f.\n",
+  max_mean_diff, max_sd_diff
+))
+
+cat(if (max_mean_diff <= 0.1 && max_sd_diff <= 0.1) {
+  "Sensitivity analysis passed: Interpolation procedure has a negligible effect on standardized precipitation indices -> results are robust.\n"
+} else {
+  "Discrepancies exceed acceptable thresholds for at least one state/scale - inspect `spi_rainfall_interpolation_sensitivity.csv`.\n"
+})
 
